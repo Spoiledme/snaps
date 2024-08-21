@@ -127,10 +127,10 @@ import type {
   TerminateAllSnapsAction,
   TerminateSnapAction,
 } from '../services';
-import type { EncryptionResult } from '../types';
-import {
-  type ExportableKeyEncryptor,
-  type KeyDerivationOptions,
+import type {
+  EncryptionResult,
+  ExportableKeyEncryptor,
+  KeyDerivationOptions,
 } from '../types';
 import {
   fetchSnap,
@@ -142,6 +142,7 @@ import {
 import {
   ALLOWED_PERMISSIONS,
   LEGACY_ENCRYPTION_KEY_DERIVATION_OPTIONS,
+  PERMITTED_CHAINS_ENDOWMENT,
 } from './constants';
 import type { SnapLocation } from './location';
 import { detectSnapLocation } from './location';
@@ -3948,7 +3949,7 @@ export class SnapController extends BaseController<
       // This needs to be assigned to have proper type inference.
       const modifiedPermissions: RequestedPermissions = {
         ...newPermissions,
-        permittedChains: {
+        [PERMITTED_CHAINS_ENDOWMENT]: {
           caveats: [
             {
               type: 'restrictNetworkSwitching',

@@ -103,7 +103,10 @@ import {
   waitForStateChange,
 } from '../test-utils';
 import { delay } from '../utils';
-import { LEGACY_ENCRYPTION_KEY_DERIVATION_OPTIONS } from './constants';
+import {
+  LEGACY_ENCRYPTION_KEY_DERIVATION_OPTIONS,
+  PERMITTED_CHAINS_ENDOWMENT,
+} from './constants';
 import { SnapsRegistryStatus } from './registry';
 import type { SnapControllerState } from './SnapController';
 import {
@@ -4922,15 +4925,27 @@ describe('SnapController', () => {
       });
 
       const approvedPermissions = {
-        'endowment:ethereum-provider': {
-          caveats: [],
+        'endowment:page-home': {
+          caveats: null,
         },
-        permittedChains: {},
+        'endowment:ethereum-provider': {},
+        [PERMITTED_CHAINS_ENDOWMENT]: {
+          caveats: [
+            {
+              type: 'restrictNetworkSwitching',
+              value: ['0x1'],
+            },
+          ],
+        },
       };
 
       expect(messenger.call).toHaveBeenCalledWith(
         'PermissionController:grantPermissions',
-        { approvedPermissions, subject: { origin: MOCK_SNAP_ID } },
+        {
+          approvedPermissions,
+          subject: { origin: MOCK_SNAP_ID },
+          requestData: expect.any(Object),
+        },
       );
 
       snapController.destroy();
