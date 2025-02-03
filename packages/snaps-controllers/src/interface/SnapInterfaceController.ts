@@ -8,6 +8,7 @@ import type {
   ControllerStateChangeEvent,
 } from '@metamask/base-controller';
 import { BaseController } from '@metamask/base-controller';
+import type { InternalAccount } from '@metamask/keyring-internal-api';
 import type {
   MaybeUpdateState,
   TestOrigin,
@@ -67,6 +68,16 @@ export type ResolveInterface = {
   handler: SnapInterfaceController['resolveInterface'];
 };
 
+type AccountsControllerGetSelectedMultichainAccountAction = {
+  type: `AccountsController:getSelectedMultichainAccount`;
+  handler: () => InternalAccount;
+};
+
+type AccountsControllerGetAccountByAddressAction = {
+  type: `AccountsController:getAccountByAddress`;
+  handler: (address: string) => InternalAccount;
+};
+
 export type SnapInterfaceControllerGetStateAction = ControllerGetStateAction<
   typeof controllerName,
   SnapInterfaceControllerState
@@ -77,7 +88,9 @@ export type SnapInterfaceControllerAllowedActions =
   | MaybeUpdateState
   | HasApprovalRequest
   | AcceptRequest
-  | GetSnap;
+  | GetSnap
+  | AccountsControllerGetSelectedMultichainAccountAction
+  | AccountsControllerGetAccountByAddressAction;
 
 export type SnapInterfaceControllerActions =
   | CreateInterface
@@ -249,7 +262,12 @@ export class SnapInterfaceController extends BaseController<
     validateInterfaceContext(context);
 
     const id = nanoid();
-    const componentState = constructState({}, element);
+    const componentState = constructState(
+      {},
+      element,
+      this.#getSelectedAccount.bind(this),
+      this.#getAccountByAddress.bind(this),
+    );
 
     this.update((draftState) => {
       // @ts-expect-error - TS2589: Type instantiation is excessively deep and
@@ -299,7 +317,12 @@ export class SnapInterfaceController extends BaseController<
     validateInterfaceContext(context);
 
     const oldState = this.state.interfaces[id].state;
-    const newState = constructState(oldState, element);
+    const newState = constructState(
+      oldState,
+      element,
+      this.#getSelectedAccount.bind(this),
+      this.#getAccountByAddress.bind(this),
+    );
 
     this.update((draftState) => {
       draftState.interfaces[id].state = newState;
@@ -423,6 +446,19 @@ export class SnapInterfaceController extends BaseController<
       'ApprovalController:acceptRequest',
       id,
       value,
+    );
+  }
+
+  #getAccountByAddress(address: string) {
+    return this.messagingSystem.call(
+      'AccountsController:getAccountByAddress',
+      address,
+    );
+  }
+
+  #getSelectedAccount() {
+    return this.messagingSystem.call(
+      'AccountsController:getSelectedMultichainAccount',
     );
   }
 

@@ -23,6 +23,7 @@ import {
 } from '@metamask/superstruct';
 import {
   CaipAccountIdStruct,
+  CaipChainIdStruct,
   hasProperty,
   HexChecksumAddressStruct,
   isPlainObject,
@@ -84,6 +85,7 @@ import {
   type SelectorElement,
   type SelectorOptionElement,
   type BannerElement,
+  type AccountSelectorElement,
   IconName,
 } from './components';
 
@@ -364,6 +366,23 @@ export const AddressStruct: Describe<AddressElement> = element('Address', {
 });
 
 /**
+ * A struct for the {@link AccountSelectorElement} type.
+ */
+export const AccountSelectorStruct: Describe<AccountSelectorElement> = element(
+  'AccountSelector',
+  {
+    name: string(),
+    hideExternalAccounts: optional(boolean()),
+    chainIds: optional(array(CaipChainIdStruct)) as unknown as Struct<
+      Infer<typeof CaipChainIdStruct>[] | undefined,
+      null
+    >,
+    switchSelectedAccount: optional(boolean()),
+    selectedAddress: optional(CaipAccountIdStruct),
+  },
+);
+
+/**
  * A struct for the {@link CardElement} type.
  */
 export const CardStruct: Describe<CardElement> = element('Card', {
@@ -465,6 +484,7 @@ const BOX_INPUT_BOTH = [
  * A subset of JSX elements that are allowed as single children of the Field component.
  */
 const FIELD_CHILDREN_ARRAY = [
+  AccountSelectorStruct,
   InputStruct,
   DropdownStruct,
   RadioGroupStruct,
@@ -472,6 +492,7 @@ const FIELD_CHILDREN_ARRAY = [
   CheckboxStruct,
   SelectorStruct,
 ] as [
+  typeof AccountSelectorStruct,
   typeof InputStruct,
   typeof DropdownStruct,
   typeof RadioGroupStruct,
@@ -860,6 +881,7 @@ export const SpinnerStruct: Describe<SpinnerElement> = element('Spinner');
  * another component (e.g., Field must be contained in a Form).
  */
 export const BoxChildStruct = typedUnion([
+  AccountSelectorStruct,
   AddressStruct,
   BoldStruct,
   BoxStruct,
@@ -924,6 +946,7 @@ export const RootJSXElementStruct = typedUnion([
  * A struct for the {@link JSXElement} type.
  */
 export const JSXElementStruct: Describe<JSXElement> = typedUnion([
+  AccountSelectorStruct,
   ButtonStruct,
   InputStruct,
   FileInputStruct,

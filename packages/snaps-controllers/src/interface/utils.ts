@@ -1,3 +1,4 @@
+import type { InternalAccount } from '@metamask/keyring-internal-api';
 import { assert } from '@metamask/snaps-sdk';
 import type {
   FormState,
@@ -17,6 +18,7 @@ import type {
   RadioElement,
   SelectorElement,
   SelectorOptionElement,
+  AccountSelectorElement,
 } from '@metamask/snaps-sdk/jsx';
 import { isJSXElementUnsafe } from '@metamask/snaps-sdk/jsx';
 import {
@@ -25,6 +27,17 @@ import {
   getJsxElementFromComponent,
   walkJsx,
 } from '@metamask/snaps-utils';
+import type { CaipAccountId, CaipChainId } from '@metamask/utils';
+import {
+  parseCaipChainId,
+  toCaipAccountId,
+  type CaipAccountAddress,
+} from '@metamask/utils';
+
+type GetSelectedAccount = () => InternalAccount | undefined;
+type GetAccountByAddress = (
+  address: CaipAccountAddress,
+) => InternalAccount | undefined;
 
 /**
  * Get a JSX element from a component or JSX element. If the component is a
@@ -56,12 +69,30 @@ export function assertNameIsUnique(state: InterfaceState, name: string) {
 }
 
 /**
+ * Create a list of CAIP account IDs from an address and a list of scopes.
+ *
+ * @param address - The address to create the account IDs from.
+ * @param scopes - The scopes to create the account IDs from.
+ * @returns The list of CAIP account IDs.
+ */
+export function createAddressList(
+  address: string,
+  scopes: CaipChainId[],
+): CaipAccountId[] {
+  return scopes.map((scope) => {
+    const { namespace, reference } = parseCaipChainId(scope);
+    return toCaipAccountId(namespace, reference, address);
+  });
+}
+
+/**
  * Construct default state for a component.
  *
  * This function is meant to be used inside constructInputState to account
  * for component specific defaults and will not override the component value or existing form state.
  *
  * @param element - The input element.
+ * @param getSelectedAccount - A function to get the selected account in the client.
  * @returns The default state for the specific component, if any.
  */
 function constructComponentSpecificDefaultState(
@@ -70,7 +101,9 @@ function constructComponentSpecificDefaultState(
     | DropdownElement
     | RadioGroupElement
     | CheckboxElement
-    | SelectorElement,
+    | SelectorElement
+    | AccountSelectorElement,
+  getSelectedAccount: GetSelectedAccount,
 ) {
   switch (element.type) {
     case 'Dropdown': {
@@ -88,6 +121,20 @@ function constructComponentSpecificDefaultState(
       return children[0]?.props.value;
     }
 
+    case 'AccountSelector': {
+      const account = getSelectedAccount();
+
+      if (!account) {
+        return null;
+      }
+
+      const { id, address, scopes } = account;
+
+      const addresses = createAddressList(address, scopes);
+
+      return { accountId: id, addresses };
+    }
+
     case 'Checkbox':
       return false;
 
@@ -103,19 +150,40 @@ function constructComponentSpecificDefaultState(
  * This function exists to account for components where that isn't the case.
  *
  * @param element - The input element.
+ * @param getAccountByAddress - A function to get an account by address.
  * @returns The state value for a given component.
  */
 function getComponentStateValue(
   element:
+    | AccountSelectorElement
     | InputElement
     | DropdownElement
     | RadioGroupElement
     | CheckboxElement
     | SelectorElement,
+  getAccountByAddress: GetAccountByAddress,
 ) {
   switch (element.type) {
     case 'Checkbox':
       return element.props.checked;
+
+    case 'AccountSelector': {
+      if (!element.props.selectedAddress) {
+        return undefined;
+      }
+
+      const account = getAccountByAddress(element.props.selectedAddress);
+
+      if (!account) {
+        return undefined;
+      }
+
+      const { id, address, scopes } = account;
+
+      const addresses = createAddressList(address, scopes);
+
+      return { accountId: id, addresses };
+    }
 
     default:
       return element.props.value;
@@ -127,18 +195,23 @@ function getComponentStateValue(
  *
  * @param oldState - The previous state.
  * @param element - The input element.
+ * @param getSelectedAccount - A function to get the selected account in the client.
+ * @param getAccountByAddress - A function to get an account by address.
  * @param form - An optional form that the input is enclosed in.
  * @returns The input state.
  */
 function constructInputState(
   oldState: InterfaceState,
   element:
+    | AccountSelectorElement
     | InputElement
     | DropdownElement
     | RadioGroupElement
     | FileInputElement
     | CheckboxElement
     | SelectorElement,
+  getSelectedAccount: GetSelectedAccount,
+  getAccountByAddress: GetAccountByAddress,
   form?: string,
 ) {
   const oldStateUnwrapped = form ? (oldState[form] as FormState) : oldState;
@@ -149,9 +222,9 @@ function constructInputState(
   }
 
   return (
-    getComponentStateValue(element) ??
+    getComponentStateValue(element, getAccountByAddress) ??
     oldInputState ??
-    constructComponentSpecificDefaultState(element) ??
+    constructComponentSpecificDefaultState(element, getSelectedAccount) ??
     null
   );
 }
@@ -161,11 +234,15 @@ function constructInputState(
  *
  * @param oldState - The previous state.
  * @param rootComponent - The UI component to construct state from.
+ * @param getSelectedAccount - A function to get the selected account in the client.
+ * @param getAccountByAddress - A function to get an account by address.
  * @returns The interface state of the passed component.
  */
 export function constructState(
   oldState: InterfaceState,
   rootComponent: JSXElement,
+  getSelectedAccount: GetSelectedAccount,
+  getAccountByAddress: GetAccountByAddress,
 ): InterfaceState {
   const newState: InterfaceState = {};
 
@@ -196,13 +273,16 @@ export function constructState(
         component.type === 'RadioGroup' ||
         component.type === 'FileInput' ||
         component.type === 'Checkbox' ||
-        component.type === 'Selector')
+        component.type === 'Selector' ||
+        component.type === 'AccountSelector')
     ) {
       const formState = newState[currentForm.name] as FormState;
       assertNameIsUnique(formState, component.props.name);
       formState[component.props.name] = constructInputState(
         oldState,
         component,
+        getSelectedAccount,
+        getAccountByAddress,
         currentForm.name,
       );
       return;
@@ -215,10 +295,16 @@ export function constructState(
       component.type === 'RadioGroup' ||
       component.type === 'FileInput' ||
       component.type === 'Checkbox' ||
-      component.type === 'Selector'
+      component.type === 'Selector' ||
+      component.type === 'AccountSelector'
     ) {
       assertNameIsUnique(newState, component.props.name);
-      newState[component.props.name] = constructInputState(oldState, component);
+      newState[component.props.name] = constructInputState(
+        oldState,
+        component,
+        getSelectedAccount,
+        getAccountByAddress,
+      );
     }
   });
 
